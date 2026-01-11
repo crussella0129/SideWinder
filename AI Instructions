@@ -1,0 +1,267 @@
+# Fusion 360 Add‑In: Axis‑Spline (Parametric XYZ Curve)
+
+## Purpose
+
+Create a Fusion 360 add‑in that constructs a **true 3D parametric curve** where X(t), Y(t), and Z(t) are independently defined but share a common parameter *t*. This avoids planar spline + orthogonal dragging and instead composes a curve from axis‑separable functions.
+
+This is a *curve compiler*, not a new kernel primitive.
+
+---
+
+## High‑Level Architecture
+
+**Inputs (User‑Defined)**
+
+* Base spline defining **X(t), Y(t)** (2D sketch)
+* Z‑profile defining **Z(t)** (secondary sketch or table)
+
+**Processing**
+
+* Reparameterize both inputs onto a shared domain t ∈ [0, 1]
+* Sample points along t
+* Compose points into XYZ space
+
+**Output**
+
+* 3D Fit Spline in the root component
+
+---
+
+## Step 0 — Prerequisites
+
+### Software
+
+* Fusion 360 (latest)
+* Python 3 (Fusion embedded)
+
+### Knowledge
+
+* Fusion API basics
+* Parametric curves
+* Sampling and interpolation
+
+---
+
+## Step 1 — Create the Add‑In Skeleton
+
+1. Open Fusion 360
+2. Utilities → Add‑Ins → Scripts and Add‑Ins
+3. Create new **Python Add‑In**
+4. Name it: `AxisSpline`
+
+This generates:
+
+* `AxisSpline.py`
+* `manifest.json`
+
+---
+
+## Step 2 — Define the Command UI
+
+Create a command with the following inputs:
+
+### Required Inputs
+
+* **XY Spline Selector**
+
+  * Type: `SelectionCommandInput`
+  * Filter: Sketch splines
+
+* **Z Definition Mode** (Dropdown)
+
+  * Options:
+
+    * Z‑Spline (sketch)
+    * Z‑Table (CSV/manual)
+
+### Z‑Spline Mode Inputs
+
+* Z‑Spline Selector
+
+  * Must share or be mappable to same parameter count
+
+### General Parameters
+
+* Sample Count (integer, default ~50)
+* Create Construction Spline (bool)
+
+---
+
+## Step 3 — Extract XY Parametric Data
+
+### Goal
+
+Evaluate the planar spline as:
+
+C_xy(t) → (x(t), y(t))
+
+### API Notes
+
+* Use `SketchSpline.geometry`
+* Cast to `NurbsCurve3D`
+* Use:
+
+  * `evaluator.getPointAtParameter()`
+
+### Normalize Parameter Space
+
+Fusion splines expose parameters in native knot space.
+
+You **must** remap:
+
+```
+t_normalized = (t - t_min) / (t_max - t_min)
+```
+
+Store:
+
+* x(t_i)
+* y(t_i)
+
+---
+
+## Step 4 — Extract Z(t)
+
+### Option A: Z‑Spline
+
+* Treat Z‑Spline as:
+
+  * Independent spline whose *output* is Z
+* Use its evaluated **Y** or **X** value as Z
+* Normalize its parameter domain the same way
+
+Result:
+
+```
+z(t_i)
+```
+
+### Option B: Z‑Table
+
+* User provides CSV or inline list
+* Interpolate values across t ∈ [0,1]
+* Linear interpolation is sufficient for v1
+
+---
+
+## Step 5 — Parameter Synchronization
+
+This is the critical conceptual step.
+
+You are enforcing:
+
+```
+t_i = i / (N - 1)
+```
+
+Then evaluating:
+
+```
+x_i = x(t_i)
+ y_i = y(t_i)
+ z_i = z(t_i)
+```
+
+This creates **axis‑separable coherence**.
+
+---
+
+## Step 6 — Compose 3D Points
+
+For each sample:
+
+```
+Point3D.create(x_i, y_i, z_i)
+```
+
+Collect into:
+
+* `ObjectCollection`
+
+---
+
+## Step 7 — Create the 3D Fit Spline
+
+API:
+
+* `Sketches.add()` OR
+* `Component.features.createFitPointSpline()`
+
+Prefer:
+
+* Root component
+* 3D sketch enabled
+
+Set:
+
+* IsClosed = false
+* IsConstruction = user option
+
+---
+
+## Step 8 — Validation & Error Handling
+
+Check:
+
+* Exactly one XY spline selected
+* Z input present
+* Sample count ≥ 4
+* Evaluators return valid points
+
+Fail fast with descriptive messages.
+
+---
+
+## Step 9 — MVP Testing Protocol
+
+Test cases:
+
+1. Flat XY spline + sinusoidal Z
+2. Circular XY + ramp Z
+3. Non‑uniform Z profile
+4. High curvature XY
+
+Verify:
+
+* No self‑intersection artifacts
+* Smooth curvature
+* No parameter drift
+
+---
+
+## Step 10 — Iteration Targets (v2+)
+
+* Arc‑length reparameterization
+* C¹ continuity matching
+* Z‑axis smoothing
+* Live preview
+* CSV editor UI
+
+---
+
+## Conceptual Alignment with Monad
+
+This add‑in establishes:
+
+```
+C(t) = [ x(t), y(t), z(t) ]
+```
+
+Which becomes the foundation for:
+
+* Frame fields
+* Matrix splines
+* Higher‑order tooling
+
+This is the *minimum viable abstraction*.
+
+---
+
+## Final Note
+
+You are not fighting Fusion’s math.
+You are fighting its assumptions.
+
+This add‑in sidesteps those assumptions cleanly.
+
+Build this once, and you will **never** drag a spline point in Z again.
