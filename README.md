@@ -88,7 +88,7 @@ Copy the `AxisSpline` folder to your Fusion 360 Add-Ins directory:
 
 ### Example Use Cases
 
-- **Helical Paths**: Circular XY spline + linear Z ramp
+- **Helical Paths**: Circular XY spline + linear Z ramp - or - orthogonal cosin and sin waves in xy and z
 - **Wave Surfaces**: Straight XY path + sinusoidal Z values
 - **Complex Toolpaths**: Artistic XY profile + controlled Z engagement
 - **Architectural Curves**: Organic XY shapes + structural Z profiles
