@@ -25,7 +25,7 @@ No more dragging spline points in Z. Define your curves mathematically and let A
 
 ## Installation
 
-### Quick Install (Recommended)
+### Quick Install (Not Yet Fully Validated - Use Manual Install if unsuccessful)
 
 **Windows:**
 1. Download and extract the SideWinder package
@@ -51,7 +51,7 @@ Options:
 - `python install.py --force` - Install without prompts
 - `python install.py --info` - Show installation directory
 
-### Manual Installation
+### Manual Installation (Verified on Windows 11)
 
 Copy the `AxisSpline` folder to your Fusion 360 Add-Ins directory:
 
