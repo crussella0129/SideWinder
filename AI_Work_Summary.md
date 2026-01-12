@@ -4,16 +4,33 @@
 
 Implemented a Fusion 360 add-in based on the specifications in `LLM_Instructions`. The add-in creates parametric 3D curves by composing independent X(t), Y(t), and Z(t) functions from separate spline definitions.
 
+Also created end-user friendly installers for distribution on the Autodesk software marketplace.
+
 ## Files Created
 
-### `AxisSpline/AxisSpline.manifest`
-- Standard Fusion 360 add-in manifest file
-- Configures the add-in to run on startup
-- Supports both Windows and macOS
+### Add-In Core
 
-### `AxisSpline/AxisSpline.py`
-- Main add-in implementation (~450 lines of Python)
-- Complete MVP functionality as specified in the instructions
+| File | Description |
+|------|-------------|
+| `AxisSpline/AxisSpline.py` | Main add-in implementation (~450 lines) |
+| `AxisSpline/AxisSpline.manifest` | Fusion 360 add-in manifest |
+
+### Installers
+
+| File | Platform | Description |
+|------|----------|-------------|
+| `install-windows.bat` | Windows | Double-click installer with GUI prompts |
+| `install-macos.command` | macOS | Double-click installer for Finder |
+| `install.py` | Cross-platform | Python installer with CLI options |
+| `uninstall-windows.bat` | Windows | Clean removal script |
+| `uninstall-macos.command` | macOS | Clean removal script |
+
+### Documentation
+
+| File | Description |
+|------|-------------|
+| `README.md` | User-facing documentation with installation guide |
+| `AI_Work_Summary.md` | This file - implementation details and next steps |
 
 ## Implementation Details
 
@@ -92,6 +109,33 @@ The implementation is ready for testing with the test cases from Step 9:
 3. Non-uniform Z profile
 4. High curvature XY
 
+## Installer Implementation
+
+### Windows Installer (`install-windows.bat`)
+- Batch script with user prompts
+- Auto-detects Fusion 360 AddIns directory via `%APPDATA%`
+- Checks for existing installation and prompts for overwrite
+- Verifies successful installation
+- Provides activation instructions
+
+### macOS Installer (`install-macos.command`)
+- Shell script that works when double-clicked from Finder
+- Uses `~/Library/Application Support/...` path
+- Same verification and prompt flow as Windows
+- Handles Gatekeeper security prompts gracefully
+
+### Cross-Platform Python Installer (`install.py`)
+- Works on Windows, macOS, and Linux (Wine)
+- CLI with `--remove`, `--force`, and `--info` options
+- Programmatic detection of Fusion 360 directories
+- Can create AddIns directory if missing (with user consent)
+- Suitable for automated deployment
+
+### Uninstallers
+- Clean removal of the AxisSpline folder
+- Confirmation prompts to prevent accidental deletion
+- Instructions for completing removal if Fusion 360 is running
+
 ---
 
 # Next Steps
@@ -99,9 +143,8 @@ The implementation is ready for testing with the test cases from Step 9:
 ## Immediate Testing Required
 
 1. **Install and Test in Fusion 360**
-   - Copy `AxisSpline` folder to Fusion 360 Add-Ins directory:
-     - Windows: `%appdata%\Autodesk\Autodesk Fusion 360\API\AddIns\`
-     - macOS: `~/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/`
+   - Use the installer scripts (`install-windows.bat` or `install-macos.command`)
+   - Or run `python install.py`
    - Load via Utilities > Add-Ins > Scripts and Add-Ins
    - Run through all test cases
 
@@ -178,6 +221,33 @@ The implementation is ready for testing with the test cases from Step 9:
 17. **Code Organization**
     - Consider splitting into multiple modules as features grow
     - Extract reusable utilities to separate file
+
+## Autodesk Marketplace Preparation
+
+18. **App Store Package**
+    - Create ZIP distribution with all files
+    - Add version numbering system
+    - Create CHANGELOG.md for version tracking
+
+19. **Marketing Assets**
+    - Create product screenshots showing the workflow
+    - Record demo video of creating 3D curves
+    - Write marketplace description copy
+
+20. **Licensing & Legal**
+    - Review GPL v3 compatibility with marketplace terms
+    - Consider dual licensing if needed for commercial sales
+    - Add EULA if required by Autodesk
+
+21. **Support Infrastructure**
+    - Set up issue tracking for bug reports
+    - Create FAQ document
+    - Establish support email or forum
+
+22. **Pricing Strategy**
+    - Research competitor pricing
+    - Consider free tier vs paid features
+    - Plan subscription vs one-time purchase model
 
 ---
 
