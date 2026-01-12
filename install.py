@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AxisSpline Cross-Platform Installer for Fusion 360
+SideWinder Parametric Spline Tool - Cross-Platform Installer for Fusion 360
 
 This installer works on Windows, macOS, and Linux.
 It can be run from the command line or double-clicked in most environments.
@@ -102,7 +102,7 @@ def install_addin(force=False):
     Returns:
         True if installation succeeded, False otherwise.
     """
-    print_header("AxisSpline Installer for Fusion 360")
+    print_header("SideWinder Parametric Spline Tool - Installer for Fusion 360")
 
     # Get directories
     script_dir = get_script_directory()
@@ -111,7 +111,7 @@ def install_addin(force=False):
 
     # Check source exists
     if not source_dir.exists():
-        print_error("AxisSpline folder not found!")
+        print_error("SideWinder (AxisSpline) folder not found!")
         print()
         print("Please ensure this installer is in the same directory as the AxisSpline folder.")
         return False
@@ -152,7 +152,7 @@ def install_addin(force=False):
 
     # Check for existing installation
     if target_dir.exists():
-        print_warning("AxisSpline is already installed.")
+        print_warning("SideWinder is already installed.")
         print()
 
         if not force:
@@ -176,7 +176,7 @@ def install_addin(force=False):
             return False
 
     # Copy the add-in
-    print_info("Installing AxisSpline...")
+    print_info("Installing SideWinder Parametric Spline Tool...")
 
     try:
         shutil.copytree(source_dir, target_dir)
@@ -188,7 +188,7 @@ def install_addin(force=False):
     if (target_dir / "AxisSpline.py").exists():
         print()
         print_header("Installation Successful!")
-        print(f"AxisSpline has been installed to:")
+        print(f"SideWinder Parametric Spline Tool has been installed to:")
         print(f"  {target_dir}")
         print()
         print("To activate the add-in:")
@@ -198,7 +198,7 @@ def install_addin(force=False):
         print("  4. Click 'Run' to start the add-in")
         print("  5. Check 'Run on Startup' to auto-load")
         print()
-        print("The add-in will appear in the Solid tab under Scripts/Add-Ins.")
+        print("The tool will appear in the Solid tab under the Create panel.")
         return True
     else:
         print_error("Installation verification failed!")
@@ -213,7 +213,7 @@ def uninstall_addin():
     Returns:
         True if uninstallation succeeded, False otherwise.
     """
-    print_header("AxisSpline Uninstaller for Fusion 360")
+    print_header("SideWinder Parametric Spline Tool - Uninstaller for Fusion 360")
 
     addin_dir = get_fusion_addin_directory()
 
@@ -224,14 +224,14 @@ def uninstall_addin():
     target_dir = addin_dir / "AxisSpline"
 
     if not target_dir.exists():
-        print_warning("AxisSpline is not installed.")
+        print_warning("SideWinder is not installed.")
         return True
 
     print_info(f"Found installation at: {target_dir}")
     print()
 
     try:
-        response = input("Are you sure you want to uninstall AxisSpline? (y/n): ").strip().lower()
+        response = input("Are you sure you want to uninstall SideWinder? (y/n): ").strip().lower()
         if response != 'y':
             print("Uninstallation cancelled.")
             return False
@@ -240,7 +240,7 @@ def uninstall_addin():
         return False
 
     print()
-    print_info("Removing AxisSpline...")
+    print_info("Removing SideWinder...")
 
     try:
         shutil.rmtree(target_dir)
@@ -252,7 +252,7 @@ def uninstall_addin():
     if not target_dir.exists():
         print()
         print_header("Uninstallation Successful!")
-        print("AxisSpline has been removed from Fusion 360.")
+        print("SideWinder has been removed from Fusion 360.")
         return True
     else:
         print_error("Uninstallation verification failed!")
@@ -262,7 +262,7 @@ def uninstall_addin():
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="AxisSpline Installer for Fusion 360",
+        description="SideWinder Parametric Spline Tool - Installer for Fusion 360",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

@@ -2,14 +2,14 @@
 setlocal enabledelayedexpansion
 
 :: ============================================================================
-:: AxisSpline Installer for Windows
+:: SideWinder Parametric Spline Tool - Installer for Windows
 :: Installs the Fusion 360 Add-In to the correct location
 :: ============================================================================
 
 echo.
-echo  ============================================
-echo   AxisSpline Installer for Fusion 360
-echo  ============================================
+echo  ================================================
+echo   SideWinder Parametric Spline Tool - Installer
+echo  ================================================
 echo.
 
 :: Check if running as administrator (not required, but informative)
@@ -46,7 +46,7 @@ set "SCRIPT_DIR=%~dp0"
 
 :: Check if AxisSpline folder exists in the script directory
 if not exist "%SCRIPT_DIR%AxisSpline" (
-    echo  [ERROR] AxisSpline folder not found!
+    echo  [ERROR] SideWinder (AxisSpline) folder not found!
     echo.
     echo  Please ensure this installer is in the same directory as the AxisSpline folder.
     echo.
@@ -56,7 +56,7 @@ if not exist "%SCRIPT_DIR%AxisSpline" (
 
 :: Check if already installed
 if exist "%ADDIN_DIR%\AxisSpline" (
-    echo  [WARNING] AxisSpline is already installed.
+    echo  [WARNING] SideWinder is already installed.
     echo.
     set /p OVERWRITE="  Do you want to overwrite the existing installation? (Y/N): "
     if /i "!OVERWRITE!" neq "Y" (
@@ -79,7 +79,7 @@ if exist "%ADDIN_DIR%\AxisSpline" (
 )
 
 :: Copy the AxisSpline folder
-echo  Installing AxisSpline...
+echo  Installing SideWinder Parametric Spline Tool...
 xcopy /e /i /h /y "%SCRIPT_DIR%AxisSpline" "%ADDIN_DIR%\AxisSpline" >nul
 
 if %errorLevel% neq 0 (
@@ -94,11 +94,11 @@ if %errorLevel% neq 0 (
 :: Verify installation
 if exist "%ADDIN_DIR%\AxisSpline\AxisSpline.py" (
     echo.
-    echo  ============================================
+    echo  ================================================
     echo   Installation Successful!
-    echo  ============================================
+    echo  ================================================
     echo.
-    echo  AxisSpline has been installed to:
+    echo  SideWinder Parametric Spline Tool has been installed to:
     echo  %ADDIN_DIR%\AxisSpline
     echo.
     echo  To activate the add-in:
@@ -108,7 +108,7 @@ if exist "%ADDIN_DIR%\AxisSpline\AxisSpline.py" (
     echo  4. Click "Run" to start the add-in
     echo  5. Check "Run on Startup" to auto-load
     echo.
-    echo  The add-in will appear in the Solid tab under Scripts/Add-Ins.
+    echo  The tool will appear in the Solid tab under the Create panel.
     echo.
 ) else (
     echo.

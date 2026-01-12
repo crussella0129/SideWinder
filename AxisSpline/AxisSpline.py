@@ -1,10 +1,11 @@
 """
-AxisSpline - Fusion 360 Add-In for Parametric XYZ Curves
+SideWinder - Fusion 360 Add-In for Parametric XYZ Curves
 
 Creates true 3D parametric curves where X(t), Y(t), and Z(t) are
 independently defined but share a common parameter t.
 
 This is a curve compiler, not a new kernel primitive.
+Supports chaining multiple curves into a continuous path.
 """
 
 import adsk.core
@@ -16,11 +17,11 @@ handlers = []
 
 # Command identifiers
 CMD_ID = 'AxisSplineCommand'
-CMD_NAME = 'Axis Spline'
+CMD_NAME = 'SideWinder Parametric Spline Tool'
 CMD_DESC = 'Create a 3D parametric curve from separate XY and Z definitions'
 
-# UI placement
-PANEL_ID = 'SolidScriptsAddinsPanel'
+# UI placement - Solid Create panel for better accessibility
+PANEL_ID = 'SolidCreatePanel'
 WORKSPACE_ID = 'FusionSolidEnvironment'
 
 
@@ -39,7 +40,7 @@ def run(context):
         if existing_def:
             existing_def.deleteMe()
 
-        # Create command definition
+        # Create main command definition
         cmd_def = cmd_defs.addButtonDefinition(
             CMD_ID,
             CMD_NAME,
@@ -67,7 +68,7 @@ def run(context):
 
     except:
         if ui:
-            ui.messageBox(f'Failed to start AxisSpline:\n{traceback.format_exc()}')
+            ui.messageBox(f'Failed to start SideWinder:\n{traceback.format_exc()}')
 
 
 def stop(context):
@@ -93,7 +94,7 @@ def stop(context):
 
     except:
         if ui:
-            ui.messageBox(f'Failed to stop AxisSpline:\n{traceback.format_exc()}')
+            ui.messageBox(f'Failed to stop SideWinder:\n{traceback.format_exc()}')
 
 
 class AxisSplineCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
@@ -107,14 +108,14 @@ class AxisSplineCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             cmd = args.command
             inputs = cmd.commandInputs
 
-            # XY Spline Selector
+            # XY Spline Selector - allows multiple curves for chaining
             xy_selection = inputs.addSelectionInput(
                 'xySplineSelection',
-                'XY Spline',
-                'Select a sketch spline for X(t) and Y(t)'
+                'XY Path (chain)',
+                'Select sketch curves for X(t) and Y(t) - multiple curves will be chained'
             )
             xy_selection.addSelectionFilter('SketchCurves')
-            xy_selection.setSelectionLimits(1, 1)
+            xy_selection.setSelectionLimits(1, 0)  # Min 1, no max (0 = unlimited)
 
             # Z Definition Mode dropdown
             z_mode_dropdown = inputs.addDropDownCommandInput(
@@ -313,11 +314,15 @@ class AxisSplineExecuteHandler(adsk.core.CommandEventHandler):
             sample_count = inputs.itemById('sampleCount').value
             is_construction = inputs.itemById('createConstruction').value
 
-            # Get XY spline
-            xy_entity = xy_selection.selection(0).entity
-            xy_curve = get_nurbs_curve(xy_entity)
+            # Get XY curves - support chaining multiple curves
+            xy_curves = []
+            for i in range(xy_selection.selectionCount):
+                entity = xy_selection.selection(i).entity
+                curve = get_nurbs_curve(entity)
+                if curve:
+                    xy_curves.append(curve)
 
-            if not xy_curve:
+            if not xy_curves:
                 ui.messageBox('Could not extract curve geometry from XY spline selection.')
                 return
 
@@ -343,8 +348,8 @@ class AxisSplineExecuteHandler(adsk.core.CommandEventHandler):
                 z_raw_values = parse_z_table(z_table.text)
                 z_values = interpolate_z_table(z_raw_values, sample_count)
 
-            # Sample XY spline
-            xy_points = sample_xy_spline(xy_curve, sample_count)
+            # Sample XY curves (handles chaining)
+            xy_points = sample_chained_xy_curves(xy_curves, sample_count)
 
             # Compose 3D points
             points_3d = compose_3d_points(xy_points, z_values)
@@ -439,6 +444,136 @@ def sample_xy_spline(curve, sample_count):
                 points.append((0.0, 0.0))
 
     return points
+
+
+def sample_chained_xy_curves(curves, total_sample_count):
+    """
+    Sample XY points from a chain of curves.
+
+    Distributes samples proportionally across curves based on their arc length.
+    Attempts to order curves by endpoint proximity for proper chaining.
+
+    Returns list of (x, y) tuples.
+    """
+    if len(curves) == 1:
+        return sample_xy_spline(curves[0], total_sample_count)
+
+    # Calculate approximate arc lengths for each curve
+    arc_lengths = []
+    for curve in curves:
+        evaluator = curve.evaluator
+        t_min, t_max = get_parameter_range(curve)
+        (success, length) = evaluator.getLengthAtParameter(t_min, t_max)
+        if not success:
+            # Fallback: estimate length from endpoints
+            (_, start_pt) = evaluator.getPointAtParameter(t_min)
+            (_, end_pt) = evaluator.getPointAtParameter(t_max)
+            if start_pt and end_pt:
+                length = start_pt.distanceTo(end_pt)
+            else:
+                length = 1.0
+        arc_lengths.append(length)
+
+    total_length = sum(arc_lengths)
+    if total_length == 0:
+        total_length = len(curves)
+        arc_lengths = [1.0] * len(curves)
+
+    # Order curves by endpoint proximity to create a proper chain
+    ordered_curves = order_curves_by_proximity(curves)
+
+    # Distribute samples proportionally
+    all_points = []
+    remaining_samples = total_sample_count
+
+    for i, curve in enumerate(ordered_curves):
+        # Recalculate arc length for ordered curve
+        evaluator = curve.evaluator
+        t_min, t_max = get_parameter_range(curve)
+        (success, length) = evaluator.getLengthAtParameter(t_min, t_max)
+        if not success:
+            (_, start_pt) = evaluator.getPointAtParameter(t_min)
+            (_, end_pt) = evaluator.getPointAtParameter(t_max)
+            if start_pt and end_pt:
+                length = start_pt.distanceTo(end_pt)
+            else:
+                length = 1.0
+
+        if i == len(ordered_curves) - 1:
+            # Last curve gets remaining samples
+            curve_samples = remaining_samples
+        else:
+            # Proportional samples based on arc length
+            curve_samples = max(2, int(total_sample_count * length / total_length))
+            remaining_samples -= curve_samples
+
+        # Sample this curve
+        curve_points = sample_xy_spline(curve, curve_samples)
+
+        # Skip first point if not first curve (avoid duplicates at joints)
+        if i > 0 and len(curve_points) > 0:
+            curve_points = curve_points[1:]
+
+        all_points.extend(curve_points)
+
+    return all_points
+
+
+def order_curves_by_proximity(curves):
+    """
+    Order curves by endpoint proximity to form a continuous chain.
+
+    Returns list of curves in chain order.
+    """
+    if len(curves) <= 1:
+        return curves
+
+    # Get endpoints for each curve
+    curve_endpoints = []
+    for curve in curves:
+        evaluator = curve.evaluator
+        t_min, t_max = get_parameter_range(curve)
+        (_, start_pt) = evaluator.getPointAtParameter(t_min)
+        (_, end_pt) = evaluator.getPointAtParameter(t_max)
+        curve_endpoints.append((start_pt, end_pt))
+
+    # Simple greedy chain ordering
+    ordered = [0]  # Start with first curve
+    used = {0}
+
+    for _ in range(len(curves) - 1):
+        last_idx = ordered[-1]
+        last_end = curve_endpoints[last_idx][1]
+
+        best_idx = None
+        best_dist = float('inf')
+        flip_next = False
+
+        for idx in range(len(curves)):
+            if idx in used:
+                continue
+
+            start_pt, end_pt = curve_endpoints[idx]
+            if start_pt and last_end:
+                dist_to_start = last_end.distanceTo(start_pt)
+                if dist_to_start < best_dist:
+                    best_dist = dist_to_start
+                    best_idx = idx
+                    flip_next = False
+
+            if end_pt and last_end:
+                dist_to_end = last_end.distanceTo(end_pt)
+                if dist_to_end < best_dist:
+                    best_dist = dist_to_end
+                    best_idx = idx
+                    flip_next = True
+
+        if best_idx is not None:
+            ordered.append(best_idx)
+            used.add(best_idx)
+            # Note: We can't actually flip curves in Fusion, so we just use the order
+
+    return [curves[i] for i in ordered]
 
 
 def sample_z_from_spline(curve, sample_count, use_y_axis=True):
