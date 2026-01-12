@@ -1,0 +1,13 @@
+{
+    "autodeskProduct": "Fusion",
+    "type": "addin",
+    "id": "AxisSpline-AddIn-001",
+    "author": "SideWinder Project",
+    "description": {
+        "": "Creates parametric 3D curves by composing independent X(t), Y(t), and Z(t) functions from separate spline definitions."
+    },
+    "version": "1.0.0",
+    "runOnStartup": true,
+    "supportedOS": "windows|mac",
+    "editEnabled": true
+}
