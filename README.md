@@ -1,4 +1,4 @@
-# SideWinder - AxisSpline Add-In for Fusion 360
+# SideWinder - Parametric Spline GeneratorAdd-In for Fusion 360
 
 Create true 3D parametric curves by composing independent X(t), Y(t), and Z(t) functions.
 
