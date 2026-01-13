@@ -17,7 +17,7 @@ handlers = []
 
 # Command identifiers
 CMD_ID = 'AxisSplineCommand'
-CMD_NAME = 'SideWinder Parametric Spline Tool'
+CMD_NAME = 'Parametric Spline Tool'
 CMD_DESC = 'Create a 3D parametric curve from separate XY and Z definitions'
 
 # UI placement - Solid Create panel for better accessibility
@@ -129,11 +129,11 @@ class AxisSplineCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             # Z-Spline Selector (visible when Z-Spline mode selected)
             z_spline_selection = inputs.addSelectionInput(
                 'zSplineSelection',
-                'Z Spline',
-                'Select a sketch spline for Z(t) - uses Y value as Z'
+                'Z Path (chain)',
+                'Select sketch curves for Z(t) - multiple curves will be chained'
             )
             z_spline_selection.addSelectionFilter('SketchCurves')
-            z_spline_selection.setSelectionLimits(1, 1)
+            z_spline_selection.setSelectionLimits(1, 0)  # Min 1, no max (0 = unlimited)
 
             # Z-Table input (visible when Z-Table mode selected)
             z_table_input = inputs.addTextBoxCommandInput(
@@ -162,6 +162,33 @@ class AxisSplineCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 True,   # checkbox type
                 '',     # no icon
                 False   # initial value
+            )
+
+            # Invert X checkbox
+            invert_x = inputs.addBoolValueInput(
+                'invertX',
+                'Invert X',
+                True,   # checkbox type
+                '',     # no icon
+                False   # initial value - not inverted by default
+            )
+
+            # Invert Y checkbox
+            invert_y = inputs.addBoolValueInput(
+                'invertY',
+                'Invert Y',
+                True,   # checkbox type
+                '',     # no icon
+                False   # initial value - not inverted by default
+            )
+
+            # Invert Z checkbox - NOTE: Z is inverted by default, this checkbox returns to non-inverted
+            invert_z = inputs.addBoolValueInput(
+                'invertZ',
+                'Invert Z',
+                True,   # checkbox type
+                '',     # no icon
+                False   # initial value - when False, Z is inverted (multiplied by -1); when True, Z is not inverted
             )
 
             # Z Axis selection (which axis of Z-spline to use as Z value)
@@ -313,6 +340,9 @@ class AxisSplineExecuteHandler(adsk.core.CommandEventHandler):
             z_mode = inputs.itemById('zDefinitionMode')
             sample_count = inputs.itemById('sampleCount').value
             is_construction = inputs.itemById('createConstruction').value
+            invert_x = inputs.itemById('invertX').value
+            invert_y = inputs.itemById('invertY').value
+            invert_z = inputs.itemById('invertZ').value
 
             # Get XY curves - support chaining multiple curves
             xy_curves = []
@@ -334,15 +364,20 @@ class AxisSplineExecuteHandler(adsk.core.CommandEventHandler):
                 z_axis_source = inputs.itemById('zAxisSource')
                 use_y_axis = z_axis_source.selectedItem.name == 'Use Y axis of Z-spline'
 
-                z_entity = z_spline.selection(0).entity
-                z_curve = get_nurbs_curve(z_entity)
+                # Get Z curves - support chaining multiple curves (like XY)
+                z_curves = []
+                for i in range(z_spline.selectionCount):
+                    entity = z_spline.selection(i).entity
+                    curve = get_nurbs_curve(entity)
+                    if curve:
+                        z_curves.append(curve)
 
-                if not z_curve:
+                if not z_curves:
                     ui.messageBox('Could not extract curve geometry from Z spline selection.')
                     return
 
-                # Sample Z values from spline
-                z_values = sample_z_from_spline(z_curve, sample_count, use_y_axis)
+                # Sample Z values from chained splines
+                z_values = sample_chained_z_curves(z_curves, sample_count, use_y_axis)
             else:
                 z_table = inputs.itemById('zTableInput')
                 z_raw_values = parse_z_table(z_table.text)
@@ -351,8 +386,9 @@ class AxisSplineExecuteHandler(adsk.core.CommandEventHandler):
             # Sample XY curves (handles chaining)
             xy_points = sample_chained_xy_curves(xy_curves, sample_count)
 
-            # Compose 3D points
-            points_3d = compose_3d_points(xy_points, z_values)
+            # Compose 3D points with invert options
+            # Note: Z is inverted by default (multiply by -1), unless invert_z checkbox is checked
+            points_3d = compose_3d_points(xy_points, z_values, invert_x, invert_y, invert_z)
 
             # Create 3D fit spline
             create_3d_spline(design, points_3d, is_construction)
@@ -611,6 +647,79 @@ def sample_z_from_spline(curve, sample_count, use_y_axis=True):
     return z_values
 
 
+def sample_chained_z_curves(curves, total_sample_count, use_y_axis=True):
+    """
+    Sample Z values from a chain of curves.
+
+    Distributes samples proportionally across curves based on their arc length.
+    Attempts to order curves by endpoint proximity for proper chaining.
+
+    Returns list of Z values.
+    """
+    if len(curves) == 1:
+        return sample_z_from_spline(curves[0], total_sample_count, use_y_axis)
+
+    # Calculate approximate arc lengths for each curve
+    arc_lengths = []
+    for curve in curves:
+        evaluator = curve.evaluator
+        t_min, t_max = get_parameter_range(curve)
+        (success, length) = evaluator.getLengthAtParameter(t_min, t_max)
+        if not success:
+            # Fallback: estimate length from endpoints
+            (_, start_pt) = evaluator.getPointAtParameter(t_min)
+            (_, end_pt) = evaluator.getPointAtParameter(t_max)
+            if start_pt and end_pt:
+                length = start_pt.distanceTo(end_pt)
+            else:
+                length = 1.0
+        arc_lengths.append(length)
+
+    total_length = sum(arc_lengths)
+    if total_length == 0:
+        total_length = len(curves)
+        arc_lengths = [1.0] * len(curves)
+
+    # Order curves by endpoint proximity to create a proper chain
+    ordered_curves = order_curves_by_proximity(curves)
+
+    # Distribute samples proportionally
+    all_z_values = []
+    remaining_samples = total_sample_count
+
+    for i, curve in enumerate(ordered_curves):
+        # Recalculate arc length for ordered curve
+        evaluator = curve.evaluator
+        t_min, t_max = get_parameter_range(curve)
+        (success, length) = evaluator.getLengthAtParameter(t_min, t_max)
+        if not success:
+            (_, start_pt) = evaluator.getPointAtParameter(t_min)
+            (_, end_pt) = evaluator.getPointAtParameter(t_max)
+            if start_pt and end_pt:
+                length = start_pt.distanceTo(end_pt)
+            else:
+                length = 1.0
+
+        if i == len(ordered_curves) - 1:
+            # Last curve gets remaining samples
+            curve_samples = remaining_samples
+        else:
+            # Proportional samples based on arc length
+            curve_samples = max(2, int(total_sample_count * length / total_length))
+            remaining_samples -= curve_samples
+
+        # Sample this curve
+        curve_z_values = sample_z_from_spline(curve, curve_samples, use_y_axis)
+
+        # Skip first value if not first curve (avoid duplicates at joints)
+        if i > 0 and len(curve_z_values) > 0:
+            curve_z_values = curve_z_values[1:]
+
+        all_z_values.extend(curve_z_values)
+
+    return all_z_values
+
+
 def parse_z_table(text):
     """
     Parse comma-separated Z values from text input.
@@ -670,15 +779,35 @@ def interpolate_z_table(z_values, sample_count):
     return result
 
 
-def compose_3d_points(xy_points, z_values):
+def compose_3d_points(xy_points, z_values, invert_x=False, invert_y=False, invert_z=False):
     """
     Compose XY points and Z values into 3D points.
+
+    By default, Z coordinates are inverted (multiplied by -1) to correct the
+    default inverted output. The invert checkboxes allow users to toggle each axis:
+    - invert_x: When True, multiply X by -1
+    - invert_y: When True, multiply Y by -1
+    - invert_z: When True, return to original (non-corrected) Z output
+                When False (default), Z is multiplied by -1 to correct inversion
 
     Returns ObjectCollection of Point3D objects.
     """
     points = adsk.core.ObjectCollection.create()
 
     for i, ((x, y), z) in enumerate(zip(xy_points, z_values)):
+        # Apply X inversion if checkbox is checked
+        if invert_x:
+            x = -x
+
+        # Apply Y inversion if checkbox is checked
+        if invert_y:
+            y = -y
+
+        # Z is inverted by default (multiply by -1) to correct the inverted output
+        # If invert_z checkbox is checked, we return to the original (inverted) behavior
+        if not invert_z:
+            z = -z
+
         point = adsk.core.Point3D.create(x, y, z)
         points.add(point)
 
