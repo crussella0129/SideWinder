@@ -26,20 +26,20 @@ From `LLM_Instructions`, the following tasks were requested for Phase 2:
   - Added new function `sample_chained_z_curves()` to handle chaining multiple Z curves (mirrors the existing `sample_chained_xy_curves()` logic)
   - Execute handler updated to iterate through all selected Z curves and use the new chaining function
 
-#### Task 3: Z Coordinates Inverted by Default
+#### Task 3: Z Output Corrected
 - **File**: `AxisSpline/AxisSpline.py`
-- **Change**: Updated `compose_3d_points()` function to multiply Z coordinates by -1 by default
-- **Logic**: When `invert_z` checkbox is False (default), Z is multiplied by -1 to correct the inverted output
+- **Finding**: The original Z output was already correct; no default inversion needed
+- **Result**: Default behavior now produces correct (non-inverted) Z output
 
 #### Task 4: Invert Checkboxes Added
 - **File**: `AxisSpline/AxisSpline.py`
 - **Three new UI inputs added**:
-  1. `invertX` - "Invert X" checkbox (default: False = not inverted)
-  2. `invertY` - "Invert Y" checkbox (default: False = not inverted)
-  3. `invertZ` - "Invert Z" checkbox (default: False = Z is inverted/corrected; True = original output)
-- **Behavior**:
-  - X and Y: When checked, multiply respective coordinate by -1
-  - Z: When unchecked (default), Z is corrected (multiplied by -1); when checked, returns to original (inverted) behavior
+  1. `invertX` - "Invert X" checkbox (default: unchecked)
+  2. `invertY` - "Invert Y" checkbox (default: unchecked)
+  3. `invertZ` - "Invert Z" checkbox (default: unchecked)
+- **Behavior** (all checkboxes work consistently):
+  - Unchecked (default): no inversion applied
+  - Checked: multiply respective coordinate by -1
 - **All invert parameters passed to `compose_3d_points()` function and applied during point composition**
 
 ### Files Modified
@@ -65,9 +65,9 @@ From `LLM_Instructions`, the following tasks were requested for Phase 2:
    - Orders curves by endpoint proximity for proper chain continuity
    - Avoids duplicate points at curve joints
 
-2. **Invert checkbox logic** is intuitive:
-   - For X and Y: "Invert" means multiply by -1
-   - For Z: Default behavior now corrects the inverted output; checking "Invert Z" returns to the original (inverted) behavior for users who prefer it
+2. **Invert checkbox logic** is consistent across all axes:
+   - All three checkboxes work the same way: checked = multiply by -1
+   - Default (unchecked) produces correct output for all axes
 
 3. **No impossibilities encountered** - All requested tasks were achievable with the existing Fusion 360 API.
 
