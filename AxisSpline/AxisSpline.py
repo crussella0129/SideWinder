@@ -182,13 +182,13 @@ class AxisSplineCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 False   # initial value - not inverted by default
             )
 
-            # Invert Z checkbox - NOTE: Z is inverted by default, this checkbox returns to non-inverted
+            # Invert Z checkbox
             invert_z = inputs.addBoolValueInput(
                 'invertZ',
                 'Invert Z',
                 True,   # checkbox type
                 '',     # no icon
-                False   # initial value - when False, Z is inverted (multiplied by -1); when True, Z is not inverted
+                False   # initial value
             )
 
             # Z Axis selection (which axis of Z-spline to use as Z value)
@@ -783,12 +783,10 @@ def compose_3d_points(xy_points, z_values, invert_x=False, invert_y=False, inver
     """
     Compose XY points and Z values into 3D points.
 
-    By default, Z coordinates are inverted (multiplied by -1) to correct the
-    default inverted output. The invert checkboxes allow users to toggle each axis:
+    The invert checkboxes allow users to flip each axis:
     - invert_x: When True, multiply X by -1
     - invert_y: When True, multiply Y by -1
-    - invert_z: When True, return to original (non-corrected) Z output
-                When False (default), Z is multiplied by -1 to correct inversion
+    - invert_z: When True, multiply Z by -1
 
     Returns ObjectCollection of Point3D objects.
     """
@@ -803,9 +801,8 @@ def compose_3d_points(xy_points, z_values, invert_x=False, invert_y=False, inver
         if invert_y:
             y = -y
 
-        # Z is inverted by default (multiply by -1) to correct the inverted output
-        # If invert_z checkbox is checked, we return to the original (inverted) behavior
-        if not invert_z:
+        # Apply Z inversion if checkbox is checked
+        if invert_z:
             z = -z
 
         point = adsk.core.Point3D.create(x, y, z)
