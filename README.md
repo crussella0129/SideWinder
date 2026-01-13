@@ -14,10 +14,14 @@ No more dragging spline points in Z. Define your curves mathematically and let A
 ## Features
 
 - **Two Input Modes for Z**:
-  - **Z-Spline**: Use another sketch spline's Y (or X) values as your Z profile
+  - **Z-Spline**: Use a sketch curve as a 3D path - the XY shape follows this path as a rail
   - **Z-Table**: Enter comma-separated values for manual control
 
+- **3D Sweep Behavior**: The Z-path defines both height (Z) and lateral offset (X), creating true parametric 3D curves
+
 - **Adjustable Sample Count**: Control curve smoothness (4-500 points)
+
+- **Axis Inversion**: Flip X, Y, or Z independently with checkboxes
 
 - **Construction Geometry Option**: Create as construction lines for reference
 
@@ -73,25 +77,40 @@ Copy the `AxisSpline` folder to your Fusion 360 Add-Ins directory:
 1. **Create your XY profile**: Draw a spline in a sketch (this defines X(t) and Y(t))
 
 2. **Create your Z profile** (choose one):
-   - **Z-Spline**: Draw another spline where the Y-values represent your Z heights
+   - **Z-Spline**: Draw a curve that defines the 3D path your XY shape will follow
    - **Z-Table**: Prepare comma-separated Z values
 
-3. **Run AxisSpline**: Find it in the Solid tab under Scripts/Add-Ins
+   > **IMPORTANT**: When using Z-Spline mode, create your Z-path sketch on the **Front plane (XZ plane)**. In this sketch:
+   > - Horizontal movement (X-axis) = lateral offset of the XY shape
+   > - Vertical movement (Z-axis) = height of the resulting curve
+   >
+   > The tool uses world coordinates, so only the Front plane orientation produces correct results.
+
+3. **Run the tool**: Find "Parametric Spline Tool" in the Solid > Create panel
 
 4. **Configure**:
-   - Select your XY spline
+   - Select your XY curve(s) - multiple curves will be chained
    - Choose Z definition mode
-   - Select Z spline or enter Z values
+   - Select Z curve(s) or enter Z values
    - Adjust sample count as needed
+   - Use Invert checkboxes to flip axes if needed
 
 5. **Click OK** to create the 3D curve
 
 ### Example Use Cases
 
-- **Helical Paths**: Circular XY spline + linear Z ramp - or - orthogonal cosin and sin waves in xy and z
-- **Wave Surfaces**: Straight XY path + sinusoidal Z values
-- **Complex Toolpaths**: Artistic XY profile + controlled Z engagement
+- **Helical Paths**: Circle (XY) + diagonal line going up (Z on Front plane) = helix
+- **Helix with Lateral Shift**: Circle (XY) + path that goes up then right (Z) = helix that rises then moves sideways
+- **Wave Along a Path**: Straight line (XY) + sinusoidal curve (Z) = wavy 3D curve
+- **Complex Toolpaths**: Artistic XY profile + controlled Z engagement path
 - **Architectural Curves**: Organic XY shapes + structural Z profiles
+
+### Tips
+
+- **Curve Chaining**: Select multiple curves for XY or Z paths - they're automatically ordered by endpoint proximity
+- **Sample Count**: Start with 50. Increase for smoother curves, decrease for faster generation
+- **Invert Checkboxes**: Use these to mirror your curve without redrawing
+- **Z-Path Orientation**: Always use Front plane for Z-path sketches to ensure correct world coordinate mapping
 
 ## Uninstallation
 

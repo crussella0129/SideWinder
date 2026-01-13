@@ -191,15 +191,6 @@ class AxisSplineCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 False   # initial value
             )
 
-            # Z Axis selection (which axis of Z-spline to use as Z value)
-            z_axis_dropdown = inputs.addDropDownCommandInput(
-                'zAxisSource',
-                'Z Value Source',
-                adsk.core.DropDownStyles.TextListDropDownStyle
-            )
-            z_axis_dropdown.listItems.add('Use Y axis of Z-spline', True)
-            z_axis_dropdown.listItems.add('Use X axis of Z-spline', False)
-
             # Connect to input changed event for UI updates
             on_input_changed = AxisSplineInputChangedHandler()
             cmd.inputChanged.add(on_input_changed)
@@ -241,12 +232,10 @@ class AxisSplineInputChangedHandler(adsk.core.InputChangedEventHandler):
                 z_mode = inputs.itemById('zDefinitionMode')
                 z_spline = inputs.itemById('zSplineSelection')
                 z_table = inputs.itemById('zTableInput')
-                z_axis = inputs.itemById('zAxisSource')
 
                 is_spline_mode = z_mode.selectedItem.name == 'Z-Spline (sketch)'
 
                 z_spline.isVisible = is_spline_mode
-                z_axis.isVisible = is_spline_mode
                 z_table.isVisible = not is_spline_mode
 
         except:
@@ -361,8 +350,6 @@ class AxisSplineExecuteHandler(adsk.core.CommandEventHandler):
 
             if is_spline_mode:
                 z_spline = inputs.itemById('zSplineSelection')
-                z_axis_source = inputs.itemById('zAxisSource')
-                use_y_axis = z_axis_source.selectedItem.name == 'Use Y axis of Z-spline'
 
                 # Get Z curves - support chaining multiple curves (like XY)
                 z_curves = []
@@ -376,22 +363,24 @@ class AxisSplineExecuteHandler(adsk.core.CommandEventHandler):
                     ui.messageBox('Could not extract curve geometry from Z spline selection.')
                     return
 
-                # Sample Z values from chained splines
-                z_values = sample_chained_z_curves(z_curves, sample_count, use_y_axis)
+                # Sample XY curves (handles chaining)
+                xy_points = sample_chained_xy_curves(xy_curves, sample_count)
+
+                # Use 3D sweep mode - XY shape follows Z-path as a rail
+                z_path_points = sample_chained_z_path_3d(z_curves, sample_count)
+                points_3d = compose_3d_points_sweep(xy_points, z_path_points, invert_x, invert_y, invert_z)
+                create_3d_spline(design, points_3d, is_construction)
             else:
                 z_table = inputs.itemById('zTableInput')
                 z_raw_values = parse_z_table(z_table.text)
                 z_values = interpolate_z_table(z_raw_values, sample_count)
 
-            # Sample XY curves (handles chaining)
-            xy_points = sample_chained_xy_curves(xy_curves, sample_count)
+                # Sample XY curves (handles chaining)
+                xy_points = sample_chained_xy_curves(xy_curves, sample_count)
 
-            # Compose 3D points with invert options
-            # Note: Z is inverted by default (multiply by -1), unless invert_z checkbox is checked
-            points_3d = compose_3d_points(xy_points, z_values, invert_x, invert_y, invert_z)
-
-            # Create 3D fit spline
-            create_3d_spline(design, points_3d, is_construction)
+                # Compose 3D points with invert options
+                points_3d = compose_3d_points(xy_points, z_values, invert_x, invert_y, invert_z)
+                create_3d_spline(design, points_3d, is_construction)
 
         except:
             app = adsk.core.Application.get()
@@ -400,29 +389,32 @@ class AxisSplineExecuteHandler(adsk.core.CommandEventHandler):
 
 
 def get_nurbs_curve(entity):
-    """Extract NURBS curve geometry from a sketch entity."""
+    """Extract NURBS curve geometry from a sketch entity.
+
+    Prefers worldGeometry to get coordinates in world space,
+    so sketches work correctly regardless of which plane they were created on.
+    """
     try:
-        # Handle different sketch curve types
-        if hasattr(entity, 'geometry'):
-            geom = entity.geometry
-            # Check if it's already a NurbsCurve3D
-            if isinstance(geom, adsk.core.NurbsCurve3D):
-                return geom
-            # Try to get as curve
-            if hasattr(geom, 'asNurbsCurve'):
-                return geom.asNurbsCurve
-
-        # For sketch splines specifically
-        if hasattr(entity, 'spline'):
-            return entity.spline.geometry
-
-        # Try worldGeometry for sketch entities
+        # Try worldGeometry FIRST for sketch entities - this gives world coordinates
+        # so the sketch works correctly regardless of which plane it was created on
         if hasattr(entity, 'worldGeometry'):
             geom = entity.worldGeometry
             if isinstance(geom, adsk.core.NurbsCurve3D):
                 return geom
             if hasattr(geom, 'asNurbsCurve'):
                 return geom.asNurbsCurve
+
+        # Fallback to local geometry
+        if hasattr(entity, 'geometry'):
+            geom = entity.geometry
+            if isinstance(geom, adsk.core.NurbsCurve3D):
+                return geom
+            if hasattr(geom, 'asNurbsCurve'):
+                return geom.asNurbsCurve
+
+        # For sketch splines specifically
+        if hasattr(entity, 'spline'):
+            return entity.spline.geometry
 
         return None
     except:
@@ -612,18 +604,28 @@ def order_curves_by_proximity(curves):
     return [curves[i] for i in ordered]
 
 
-def sample_z_from_spline(curve, sample_count, use_y_axis=True):
+def sample_z_from_spline(curve, sample_count, use_y_axis=True, use_cumulative=False, start_offset=0.0):
     """
     Sample Z values from the Z-spline.
 
     The spline's Y (or X) value at each parameter is used as the Z value.
 
-    Returns list of Z values.
+    Args:
+        curve: The NURBS curve to sample
+        sample_count: Number of samples to take
+        use_y_axis: If True, use Y coordinate; if False, use X coordinate
+        use_cumulative: If True, track cumulative delta instead of absolute value
+        start_offset: Starting Z offset for cumulative mode (to chain curves)
+
+    Returns tuple of (z_values list, final_z_value for chaining)
     """
     evaluator = curve.evaluator
     t_min, t_max = get_parameter_range(curve)
 
     z_values = []
+    cumulative_z = start_offset
+    prev_val = None
+
     for i in range(sample_count):
         # Normalized parameter t ∈ [0, 1]
         t_normalized = i / (sample_count - 1)
@@ -635,29 +637,45 @@ def sample_z_from_spline(curve, sample_count, use_y_axis=True):
         (success, point) = evaluator.getPointAtParameter(t_curve)
 
         if success:
-            z_val = point.y if use_y_axis else point.x
-            z_values.append(z_val)
+            current_val = point.y if use_y_axis else point.x
+
+            if use_cumulative:
+                if prev_val is not None:
+                    delta = current_val - prev_val
+                    cumulative_z += delta
+                z_values.append(cumulative_z)
+                prev_val = current_val
+            else:
+                z_values.append(current_val)
         else:
             # Fallback
             if z_values:
                 z_values.append(z_values[-1])
             else:
-                z_values.append(0.0)
+                z_values.append(start_offset if use_cumulative else 0.0)
 
-    return z_values
+    final_z = z_values[-1] if z_values else start_offset
+    return z_values, final_z
 
 
-def sample_chained_z_curves(curves, total_sample_count, use_y_axis=True):
+def sample_chained_z_curves(curves, total_sample_count, use_y_axis=True, use_cumulative=False):
     """
     Sample Z values from a chain of curves.
 
     Distributes samples proportionally across curves based on their arc length.
     Attempts to order curves by endpoint proximity for proper chaining.
 
+    Args:
+        curves: List of NURBS curves to sample
+        total_sample_count: Total number of samples across all curves
+        use_y_axis: If True, use Y coordinate; if False, use X coordinate
+        use_cumulative: If True, track cumulative delta-Y along the path
+
     Returns list of Z values.
     """
     if len(curves) == 1:
-        return sample_z_from_spline(curves[0], total_sample_count, use_y_axis)
+        z_values, _ = sample_z_from_spline(curves[0], total_sample_count, use_y_axis, use_cumulative, 0.0)
+        return z_values
 
     # Calculate approximate arc lengths for each curve
     arc_lengths = []
@@ -686,6 +704,7 @@ def sample_chained_z_curves(curves, total_sample_count, use_y_axis=True):
     # Distribute samples proportionally
     all_z_values = []
     remaining_samples = total_sample_count
+    cumulative_offset = 0.0  # Track cumulative Z for chaining in cumulative mode
 
     for i, curve in enumerate(ordered_curves):
         # Recalculate arc length for ordered curve
@@ -709,7 +728,12 @@ def sample_chained_z_curves(curves, total_sample_count, use_y_axis=True):
             remaining_samples -= curve_samples
 
         # Sample this curve
-        curve_z_values = sample_z_from_spline(curve, curve_samples, use_y_axis)
+        curve_z_values, final_z = sample_z_from_spline(
+            curve, curve_samples, use_y_axis, use_cumulative, cumulative_offset
+        )
+
+        # Update cumulative offset for next curve
+        cumulative_offset = final_z
 
         # Skip first value if not first curve (avoid duplicates at joints)
         if i > 0 and len(curve_z_values) > 0:
@@ -718,6 +742,158 @@ def sample_chained_z_curves(curves, total_sample_count, use_y_axis=True):
         all_z_values.extend(curve_z_values)
 
     return all_z_values
+
+
+def sample_z_path_3d(curve, sample_count):
+    """
+    Sample displacement points from the Z-path curve for 3D sweep mode.
+
+    Uses world coordinates so the Z-path sketch works correctly when
+    created on the Front plane (XZ plane).
+
+    Returns list of (x_offset, z_height) tuples where:
+        - x_offset: World X coordinate (horizontal offset added to XY shape)
+        - z_height: World Z coordinate (becomes the Z height)
+    """
+    evaluator = curve.evaluator
+    t_min, t_max = get_parameter_range(curve)
+
+    displacements = []
+    for i in range(sample_count):
+        t_normalized = i / (sample_count - 1)
+        t_curve = denormalize_parameter(t_normalized, t_min, t_max)
+        (success, point) = evaluator.getPointAtParameter(t_curve)
+
+        if success:
+            # Use world X for horizontal offset, world Z for height
+            # Negate Z to correct orientation for Front plane (XZ) sketches
+            displacements.append((point.x, -point.z))
+        else:
+            if displacements:
+                displacements.append(displacements[-1])
+            else:
+                displacements.append((0.0, 0.0))
+
+    return displacements
+
+
+def sample_chained_z_path_3d(curves, total_sample_count):
+    """
+    Sample displacement points from a chain of Z-path curves for 3D sweep mode.
+
+    Uses world coordinates (X for horizontal offset, Z for height).
+    Tracks cumulative displacement so the XY shape follows the Z-path as a rail.
+
+    Returns list of (x_offset, z_height) tuples representing cumulative displacement.
+    """
+    if len(curves) == 1:
+        raw_points = sample_z_path_3d(curves[0], total_sample_count)
+        # Convert to displacement from start
+        start_x, start_z = raw_points[0] if raw_points else (0.0, 0.0)
+        return [(x - start_x, z - start_z) for x, z in raw_points]
+
+    # Order curves by endpoint proximity
+    ordered_curves = order_curves_by_proximity(curves)
+
+    # Calculate arc lengths for proportional sampling
+    arc_lengths = []
+    for curve in ordered_curves:
+        evaluator = curve.evaluator
+        t_min, t_max = get_parameter_range(curve)
+        (success, length) = evaluator.getLengthAtParameter(t_min, t_max)
+        if not success:
+            (_, start_pt) = evaluator.getPointAtParameter(t_min)
+            (_, end_pt) = evaluator.getPointAtParameter(t_max)
+            if start_pt and end_pt:
+                length = start_pt.distanceTo(end_pt)
+            else:
+                length = 1.0
+        arc_lengths.append(length)
+
+    total_length = sum(arc_lengths)
+    if total_length == 0:
+        total_length = len(ordered_curves)
+        arc_lengths = [1.0] * len(ordered_curves)
+
+    # Sample and accumulate displacements
+    all_displacements = []
+    remaining_samples = total_sample_count
+    cumulative_x = 0.0
+    cumulative_z = 0.0
+
+    for i, curve in enumerate(ordered_curves):
+        length = arc_lengths[i]
+        if i == len(ordered_curves) - 1:
+            curve_samples = remaining_samples
+        else:
+            curve_samples = max(2, int(total_sample_count * length / total_length))
+            remaining_samples -= curve_samples
+
+        # Sample raw points from this curve
+        raw_points = sample_z_path_3d(curve, curve_samples)
+
+        if not raw_points:
+            continue
+
+        # Get start of this curve segment
+        curve_start_x, curve_start_y = raw_points[0]
+
+        # Convert to cumulative displacements
+        curve_displacements = []
+        for px, py in raw_points:
+            dx = (px - curve_start_x) + cumulative_x
+            dz = (py - curve_start_y) + cumulative_z
+            curve_displacements.append((dx, dz))
+
+        # Update cumulative for next curve
+        if curve_displacements:
+            cumulative_x = curve_displacements[-1][0]
+            cumulative_z = curve_displacements[-1][1]
+
+        # Skip first point if not first curve to avoid duplicates
+        if i > 0 and len(curve_displacements) > 0:
+            curve_displacements = curve_displacements[1:]
+
+        all_displacements.extend(curve_displacements)
+
+    return all_displacements
+
+
+def compose_3d_points_sweep(xy_points, z_path_displacements, invert_x=False, invert_y=False, invert_z=False):
+    """
+    Compose 3D points using sweep model where XY shape follows Z-path.
+
+    In sweep mode:
+    - The XY curve defines the base shape
+    - The Z-path provides (x_offset, z_height) displacements
+    - Final position: (xy.x + x_offset, xy.y, z_height)
+
+    This creates curves that follow the Z-path's shape - if the Z-path goes
+    up then right, the result rises then moves laterally.
+
+    Returns ObjectCollection of Point3D objects.
+    """
+    points = adsk.core.ObjectCollection.create()
+
+    for i, ((base_x, base_y), (x_offset, z_height)) in enumerate(zip(xy_points, z_path_displacements)):
+        # Apply X offset from Z-path to X coordinate
+        x = base_x + x_offset
+        y = base_y
+        z = z_height
+
+        # Apply inversions
+        if invert_x:
+            x = -x
+        if invert_y:
+            y = -y
+        # Z is inverted by default to correct orientation
+        if not invert_z:
+            z = -z
+
+        point = adsk.core.Point3D.create(x, y, z)
+        points.add(point)
+
+    return points
 
 
 def parse_z_table(text):
