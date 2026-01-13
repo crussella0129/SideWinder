@@ -783,10 +783,11 @@ def compose_3d_points(xy_points, z_values, invert_x=False, invert_y=False, inver
     """
     Compose XY points and Z values into 3D points.
 
+    Z is inverted by default (multiplied by -1) to correct the output orientation.
     The invert checkboxes allow users to flip each axis:
     - invert_x: When True, multiply X by -1
     - invert_y: When True, multiply Y by -1
-    - invert_z: When True, multiply Z by -1
+    - invert_z: When True, undo the default Z inversion (return to original)
 
     Returns ObjectCollection of Point3D objects.
     """
@@ -801,8 +802,9 @@ def compose_3d_points(xy_points, z_values, invert_x=False, invert_y=False, inver
         if invert_y:
             y = -y
 
-        # Apply Z inversion if checkbox is checked
-        if invert_z:
+        # Z is always inverted by default to correct orientation
+        # If invert_z checkbox is checked, undo the default inversion
+        if not invert_z:
             z = -z
 
         point = adsk.core.Point3D.create(x, y, z)
