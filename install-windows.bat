@@ -46,7 +46,7 @@ set "SCRIPT_DIR=%~dp0"
 
 :: Check if AxisSpline folder exists in the script directory
 if not exist "%SCRIPT_DIR%AxisSpline" (
-    echo  [ERROR] SideWinder (AxisSpline) folder not found!
+    echo  [ERROR] SideWinder ^(AxisSpline^) folder not found!
     echo.
     echo  Please ensure this installer is in the same directory as the AxisSpline folder.
     echo.
