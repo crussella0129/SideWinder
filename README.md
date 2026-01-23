@@ -29,7 +29,7 @@ No more dragging spline points in Z. Define your curves mathematically and let A
 
 ## Installation
 
-### Quick Install (Not Yet Fully Validated - Use Manual Install if unsuccessful)
+### Quick Install (Not Yet Fully Validated on MacOS - Use Manual Install if unsuccessful)
 
 **Windows:**
 1. Download and extract the SideWinder package
